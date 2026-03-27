@@ -110,7 +110,7 @@ Players.PlayerAdded:Connect(Monitor)
 
 -- 5. VÒNG LẶP TUẦN TRA 1 GIỜ
 task.spawn(function()
-    while task.wait(5) do
+    while task.wait(1.5) do
         if Config and Config["sau 1h có hop server không?"] then
             ExecuteHop("Bảo trì định kỳ", "Tự động đổi server sau 1 giờ hoạt động.", false)
             break
