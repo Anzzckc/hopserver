@@ -1,37 +1,31 @@
--- Thiết lập cấu hình
-local Config = _G.XuanAn or {
-    Webhook = {
-        Enable = true,
-        Url = "YOUR_WEBHOOK_HERE" -- Thay URL Webhook của bạn vào đây
-    },
-    ["sau 1h có hop server không?"] = true
-}
+-- Main Logic Script (Optimized for Mobile Executor)
+local Config = _G.XuanAn
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local AdminList = {"rip_indra", "mygame43", "Uzoth", "Zioles", "ShafiDev", "Suizei"}
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
+local DangerWords = {"kick", "ban", "kill", "tp", "bring", "freeze", "jail", "profile"}
+local Prefixes = {":", ";", "/", ".", "?", "!", "-"}
 
--- Hàm gửi Webhook sử dụng request() thay vì PostAsync
-local function SendReport(reason, adminName)
-    if not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
+local function SendReport(reason, detail)
+    if not Config or not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
     
     local data = {
         ["embeds"] = {{
             ["title"] = "🛡️ HỆ THỐNG PHÒNG THỦ [XuanAn]",
-            ["description"] = "Đã thực hiện nhảy server để bảo vệ tài khoản.",
+            ["description"] = "Đã thực hiện nhảy Server để bảo vệ tài khoản.",
             ["color"] = 16711680, -- Màu đỏ
             ["fields"] = {
-                {["name"] = "⚠️ Lý do", ["value"] = reason, ["inline"] = false},
-                {["name"] = "🔍 Tên Admin", ["value"] = adminName or "N/A", ["inline"] = true},
                 {["name"] = "⏰ Thời gian", ["value"] = os.date("%H:%M:%S"), ["inline"] = true},
-                {["name"] = "🆔 JobId", ["value"] = "```" .. game.JobId .. "```", ["inline"] = false}
+                {["name"] = "🆔 Server JobId", ["value"] = "```" .. game.JobId .. "```", ["inline"] = false},
+                {["name"] = "⚠️ Lý do", ["value"] = "**" .. reason .. "**", ["inline"] = true},
+                {["name"] = "🔍 Chi tiết", ["value"] = detail, ["inline"] = false}
             },
-            ["footer"] = {["text"] = "Delta Mobile Executor"}
+            ["footer"] = {["text"] = "Delta Mobile Executor • " .. os.date("%d/%m/%Y")}
         }}
     }
 
-    -- Sử dụng request() theo yêu cầu
+    -- Sử dụng hàm request() thay thế cho HttpService:PostAsync()
     local success, res = pcall(function()
         return request({
             Url = Config.Webhook.Url,
@@ -41,55 +35,55 @@ local function SendReport(reason, adminName)
         })
     end)
     
-    return success
+    if not success then
+        warn("Lỗi gửi Webhook: " .. tostring(res))
+    end
 end
 
--- Hàm thực hiện Hop Server
-local function ExecuteHop(reason, adminName)
-    print("🚀 Đang thực hiện Hop Server: " .. reason)
-    SendReport(reason, adminName)
-    
-    task.wait(1.5) -- Chờ một chút để Webhook kịp gửi đi
-    
-    -- Ưu tiên chạy script hop của bạn, nếu lỗi sẽ dùng Teleport mặc định
-    local hopSuccess = pcall(function()
+local function ExecuteHop(reason, detail)
+    SendReport(reason, detail)
+    task.wait(1.5) -- Chờ gửi webhook xong
+    pcall(function()
+        -- Gọi script nhảy server của bạn
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Anzzckc/get-hopsv/refs/heads/main/runhopsv.lua"))()
     end)
-    
-    if not hopSuccess then
-        TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
-    end
 end
 
--- Kiểm tra Admin
-local function CheckAdmin(player)
-    for _, admin in pairs(AdminList) do
-        if player.Name == admin then
-            ExecuteHop("Phát hiện Admin gia nhập", player.Name)
-            return true
+local function Monitor(player)
+    -- 1. Check Admin gia nhập
+    for _, adminName in pairs(AdminList) do
+        if player.Name == adminName then
+            ExecuteHop("Phát hiện Admin gia nhập", "Tên đối tượng: " .. player.Name)
+            return
         end
     end
-    return false
+
+    -- 2. Check Chat (Danger Words)
+    player.Chatted:Connect(function(msg)
+        local m = string.lower(msg)
+        for _, pfx in pairs(Prefixes) do
+            for _, word in pairs(DangerWords) do
+                if string.find(m, pfx .. word) then
+                    ExecuteHop("Phát hiện lệnh nguy hiểm", "Admin " .. player.Name .. " chat: " .. msg)
+                    return
+                end
+            end
+        end
+    end)
 end
 
--- Theo dõi người chơi mới
-Players.PlayerAdded:Connect(function(player)
-    CheckAdmin(player)
-end)
-
--- Kiểm tra những người đã có sẵn trong server
+-- Khởi chạy vòng lặp kiểm tra
 for _, p in pairs(Players:GetPlayers()) do
-    if CheckAdmin(p) then break end
+    if p ~= Players.LocalPlayer then Monitor(p) end
 end
+Players.PlayerAdded:Connect(Monitor)
 
--- Tự động Hop sau 1 giờ (Tuần tra định kỳ)
+-- Tự động Hop sau 1 giờ (3600 giây)
 task.spawn(function()
-    while true do
-        task.wait(3600)
-        if Config["sau 1h có hop server không?"] then
-            ExecuteHop("Tuần tra định kỳ (1 giờ)", "N/A")
+    while task.wait(3600) do
+        if Config and Config["sau 1h có hop server không?"] then
+            ExecuteHop("Tuần tra định kỳ", "Tự động đổi Server sau 1 giờ hoạt động.")
+            break
         end
     end
 end)
-
-print("✅ [XuanAn] Hệ thống bảo vệ đã kích hoạt!")
