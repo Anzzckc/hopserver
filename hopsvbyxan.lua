@@ -1,7 +1,36 @@
 local Config = _G.XuanAn
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
+
+local function ResetHopFile()
+    local fileName = LocalPlayer.Name .. ".json"
+    writefile(fileName, HttpService:JSONEncode({["LastTime"] = os.time(), ["Count"] = 0}))
+    StarterGui:SetCore("SendNotification", {
+        Title = "System",
+        Text = "Hop Count has been Reset to 0!",
+        Duration = 5
+    })
+end
+
+local function ShowResetNotification()
+    StarterGui:SetCore("SendNotification", {
+        Title = "Control Panel",
+        Text = "Do You Want To Reset Hop Count?",
+        Duration = 15,
+        Button1 = "Reset Now",
+        Button2 = "Keep It",
+        Callback = BindableFunction
+    })
+end
+
+local Bindable = Instance.new("BindableFunction")
+Bindable.OnServerInvoke = function(button)
+    if button == "Reset Now" then
+        ResetHopFile()
+    end
+end
 
 local function ManageHopCount()
     local currentTime = os.time()
@@ -24,7 +53,6 @@ local function SendVipReport(reason, detail, oldJobId, isEmergency)
     local color = isEmergency and 16711680 or 65280
     local playerCount = #Players:GetPlayers()
     local teleportScript = 'game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", "'..oldJobId..'")'
-
     local data = {
         ["embeds"] = {{
             ["title"] = "Notification 🔔",
@@ -88,6 +116,16 @@ for _, p in pairs(Players:GetPlayers()) do Monitor(p) end
 Players.PlayerAdded:Connect(Monitor)
 
 task.spawn(function()
+    task.wait(2)
+    StarterGui:SetCore("SendNotification", {
+        Title = "Control Panel",
+        Text = "Do You Want To Reset Hop Count?",
+        Duration = 15,
+        Button1 = "Reset Now",
+        Button2 = "Keep It",
+        Callback = Bindable
+    })
+    
     if Config and Config["Automatically Hop When The Time Comes"] == true then
         local hours = Config["HopIntervalHours"] or 1
         task.wait(hours * 3600)
