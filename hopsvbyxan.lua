@@ -9,27 +9,10 @@ local function ResetHopFile()
     writefile(fileName, HttpService:JSONEncode({["LastTime"] = os.time(), ["Count"] = 0}))
     StarterGui:SetCore("SendNotification", {
         Title = "System",
-        Text = "Hop Count has been Reset to 0!",
-        Duration = 5
+        Text = "Hop Count Reset Successfully!",
+        Duration = 5,
+        Icon = "rbxassetid://152601772" -- Icon Roblox
     })
-end
-
-local function ShowResetNotification()
-    StarterGui:SetCore("SendNotification", {
-        Title = "Control Panel",
-        Text = "Do You Want To Reset Hop Count?",
-        Duration = 15,
-        Button1 = "Reset Now",
-        Button2 = "Keep It",
-        Callback = BindableFunction
-    })
-end
-
-local Bindable = Instance.new("BindableFunction")
-Bindable.OnServerInvoke = function(button)
-    if button == "Reset Now" then
-        ResetHopFile()
-    end
 end
 
 local function ManageHopCount()
@@ -117,15 +100,21 @@ Players.PlayerAdded:Connect(Monitor)
 
 task.spawn(function()
     task.wait(2)
+    local bind = Instance.new("BindableFunction")
+    bind.OnServerInvoke = function(button)
+        if button == "Reset Now" then
+            ResetHopFile()
+        end
+    end
     StarterGui:SetCore("SendNotification", {
         Title = "Control Panel",
-        Text = "Do You Want To Reset Hop Count?",
-        Duration = 15,
+        Text = "(Do You Want To Reset Hop Count?)",
+        Duration = 20,
         Button1 = "Reset Now",
         Button2 = "Keep It",
-        Callback = Bindable
+        Callback = bind,
+        Icon = "rbxassetid://3129596397" -- Icon cài đặt xịn
     })
-    
     if Config and Config["Automatically Hop When The Time Comes"] == true then
         local hours = Config["HopIntervalHours"] or 1
         task.wait(hours * 3600)
