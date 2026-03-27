@@ -1,0 +1,138 @@
+local Config = _G.XuanAn
+
+-- ================== CẤU HÌNH ==================
+local AdminList = {"rip_indra", "mygame43", "Uzoth", "Zioles", "ShafiDev", "Suizei"}
+local HopCountFile = "XuanAn_HopCount.txt"
+local LastDateFile = "XuanAn_LastDate.txt"
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+
+-- ================== HỆ THỐNG ĐẾM HOPCOUNT + RESET HÀNG NGÀY ==================
+local HopCount = 0
+local LastDate = ""
+
+local function LoadHopData()
+    if isfile(HopCountFile) then
+        HopCount = tonumber(readfile(HopCountFile)) or 0
+    end
+    if isfile(LastDateFile) then
+        LastDate = readfile(LastDateFile)
+    end
+    
+    local today = os.date("%d/%m/%Y")
+    if LastDate ~= today then
+        HopCount = 0
+        LastDate = today
+        writefile(LastDateFile, LastDate)
+        writefile(HopCountFile, tostring(HopCount))
+    end
+end
+
+local function SaveHopData()
+    writefile(HopCountFile, tostring(HopCount))
+end
+
+LoadHopData()
+
+-- ================== GỬI WEBHOOK BẰNG request() (không dùng PostAsync) ==================
+local function SendReport(reason_label, detail)
+    if not Config or not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
+
+    local time_str = os.date("%H:%M:%S - %d/%m/%Y")
+    local serverId = game.JobId or "Unknown"
+
+    local data = {
+        ["embeds"] = {{
+            ["title"] = "🛡️ HỆ THỐNG PHÒNG THỦ [XuanAn]",
+            ["description"] = "Phát hiện nguy hiểm hoặc đến giờ tuần tra.",
+            ["color"] = 16711680,
+            ["fields"] = {
+                {["name"] = "📈 Số lần hop", ["value"] = tostring(HopCount), ["inline"] = true},
+                {["name"] = "⏰ Thời gian", ["value"] = time_str, ["inline"] = true},
+                {["name"] = "⚠️ Lý do", ["value"] = reason_label, ["inline"] = false},
+                {["name"] = "🔍 Chi tiết", ["value"] = detail, ["inline"] = false},
+                {["name"] = "🌍 Server ID", ["value"] = serverId, ["inline"] = false}
+            }
+        }}
+    }
+
+    local body = HttpService:JSONEncode(data)
+    local requestFunc = request or syn.request or http_request
+
+    if not requestFunc then
+        warn("[XuanAn] Không tìm thấy hàm request! Webhook không gửi được.")
+        return
+    end
+
+    local sent = false
+    for attempt = 1, 3 do  -- retry tối đa 3 lần
+        local success = pcall(function()
+            requestFunc({
+                Url = Config.Webhook.Url,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = body
+            })
+        end)
+        
+        if success then
+            sent = true
+            break
+        else
+            warn("[XuanAn] Webhook thất bại lần " .. attempt .. ", thử lại sau 0.5s...")
+            task.wait(0.5)
+        end
+    end
+
+    if not sent then
+        warn("[XuanAn] ❌ Gửi webhook thất bại sau 3 lần thử!")
+    end
+end
+
+-- ================== HÀM HOP SERVER ==================
+local function ExecuteHop(isAdmin, detail)
+    HopCount = HopCount + 1
+    SaveHopData()
+
+    local reason_label = isAdmin and "🚨 CẢNH BÁO KHẨN CẤP" or "🔄 BẢO TRÌ ĐỊNH KỲ"
+    
+    -- Gửi webhook trước
+    SendReport(reason_label, detail)
+    
+    -- Đợi đảm bảo webhook đã gửi thành công
+    task.wait(1.5)
+    
+    -- Thực hiện hop server
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Anzzckc/get-hopsv/refs/heads/main/runhopsv.lua"))()
+    end)
+end
+
+-- ================== PHÁT HIỆN ADMIN JOIN ==================
+local function Monitor(player)
+    for _, adminName in ipairs(AdminList) do
+        if player.Name == adminName then
+            ExecuteHop(true, "Tên Admin: " .. player.Name)
+            return
+        end
+    end
+end
+
+-- Kiểm tra người chơi hiện tại
+for _, p in ipairs(Players:GetPlayers()) do
+    Monitor(p)
+end
+Players.PlayerAdded:Connect(Monitor)
+
+-- ================== AUTO HOP SAU 1 GIỜ ==================
+task.spawn(function()
+    while true do
+        task.wait(3600)
+        if Config and Config["sau 1h có hop server không?"] == true then
+            ExecuteHop(false, "Tự động đổi Server sau 1 giờ hoạt động.")
+        end
+    end
+end)
+
+print("✅ [XuanAn Hop SV] Đã khởi động thành công trên Delta Mobile!")
