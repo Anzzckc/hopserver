@@ -1,66 +1,64 @@
--- [2026-03-27] Logic Version 2.1 - Smart Session & Hop Limit
+-- [2026-03-27] Logic Version 3.1 - VIP "Jump First, Report Later"
 local Config = _G.XuanAn
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
--- 1. XỬ LÝ BỘ ĐẾM & GIỚI HẠN 3 TIẾNG
+-- 1. QUẢN LÝ BỘ ĐẾM & GIỚI HẠN 3 TIẾNG (SESSION)
 local function ManageHopCount()
     local currentTime = os.time()
-    local lastUpdate = 0
-    local count = 0
+    local lastUpdate, count = 0, 0
     
-    -- Đọc dữ liệu cũ
     if isfile("XuanAn_Session.json") then
         local success, data = pcall(function() 
             return HttpService:JSONDecode(readfile("XuanAn_Session.json")) 
         end)
-        if success then
+        if success then 
             lastUpdate = data.LastTime or 0
-            count = data.Count or 0
+            count = data.Count or 0 
         end
     end
 
     -- Nếu quá 3 tiếng (10800 giây) không hoạt động, reset về 0
-    if (currentTime - lastUpdate) > 10800 then
-        count = 0
+    if (currentTime - lastUpdate) > 10800 then 
+        count = 0 
     end
 
-    -- Cập nhật dữ liệu mới
     count = count + 1
     writefile("XuanAn_Session.json", HttpService:JSONEncode({
-        ["LastTime"] = currentTime,
+        ["LastTime"] = currentTime, 
         ["Count"] = count
     }))
-    
     return count
 end
 
--- DANH SÁCH ADMIN & LỆNH BẪY
-local AdminList = {"rip_indra", "mygame43", "Uzoth", "Zioles", "ShafiDev", "Suizei"}
-local DangerWords = {"kick", "ban", "kill", "tp", "bring", "freeze", "jail", "profile"}
-local Prefixes = {":", ";", "/", ".", "?", "!", "-"}
-
--- 2. HÀM GỬI WEBHOOK DÙNG REQUEST()
-local function SendReport(reasonType, detail, isEmergency)
+-- 2. HÀM GỬI WEBHOOK VIP (SAU KHI ĐÃ NHẢY SANG SERVER MỚI)
+local function SendVipReport(reason, detail, oldJobId, isEmergency)
     if not Config or not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
     
     local totalHops = ManageHopCount()
-    local timestamp = os.date("%H:%M:%S - Ngày %d Tháng %m Năm 2026")
-    local title = isEmergency and "🚨 CẢNH BÁO KHẨN CẤP" or "📊 BÁO CÁO HỆ THỐNG AFK"
-    local embedColor = isEmergency and 16711680 or 65280
+    local timestamp = os.date("%H:%M:%S - %d/%m/2026")
+    local color = isEmergency and 16711680 or 65280 -- Đỏ hoặc Xanh lá
+    local playerCount = #Players:GetPlayers()
+    
+    -- Tạo lệnh Script Teleport để copy nhanh
+    local teleportScript = 'game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", "'..oldJobId..'")'
 
     local data = {
         ["embeds"] = {{
-            ["title"] = title,
-            ["color"] = embedColor,
+            ["title"] = "Thông Báo 🔔",
+            ["color"] = color,
             ["fields"] = {
-                {["name"] = "📈 Số lần nhảy", ["value"] = "**" .. tostring(totalHops) .. "**", ["inline"] = false},
-                {["name"] = "⏰ Thời gian", ["value"] = timestamp, ["inline"] = false},
-                {["name"] = "⚠️ Lý do", ["value"] = reasonType, ["inline"] = false},
+                {["name"] = "📈 Hop Server", ["value"] = "**" .. tostring(totalHops) .. "**", ["inline"] = true},
+                {["name"] = "⏰ Thời gian", ["value"] = timestamp, ["inline"] = true},
+                {["name"] = "⚠️ Lý do", ["value"] = reason, ["inline"] = false},
                 {["name"] = "🔍 Chi tiết", ["value"] = detail, ["inline"] = false},
-                {["name"] = "🛡️ Hành động", ["value"] = "Đã nhảy sang server mới an toàn.", ["inline"] = false}
+                {["name"] = "📊 Players :", ["value"] = "`" .. playerCount .. "/12`", ["inline"] = true},
+                {["name"] = "🆔 Place-Id :", ["value"] = "`" .. game.PlaceId .. "`", ["inline"] = true},
+                {["name"] = "🆔 Job-Id :", ["value"] = "`" .. oldJobId .. "`", ["inline"] = false},
+                {["name"] = "📜 Script :", ["value"] = "`" .. teleportScript .. "`", ["inline"] = false},
+                {["name"] = "🛡️ Hành động", ["value"] = "Hop Server Mới✅", ["inline"] = false}
             },
-            ["footer"] = {["text"] = "Server JobId: " .. game.JobId}
+            ["footer"] = {["text"] = "Current JobId: " .. game.JobId}
         }}
     }
 
@@ -74,30 +72,62 @@ local function SendReport(reasonType, detail, isEmergency)
     end)
 end
 
--- 3. HÀM NHẢY SERVER
-local function ExecuteHop(reasonType, detail, isEmergency)
-    SendReport(reasonType, detail, isEmergency)
-    task.wait(2)
+-- 3. HÀM NHẢY SERVER & LƯU TRỮ TẠM THỜI
+local function ExecuteHop(reason, detail, isEmergency)
+    local oldJobId = game.JobId
+    
+    -- Lưu thông tin báo cáo vào file tạm để server sau khi nhảy sẽ đọc và gửi
+    writefile("XuanAn_PendingReport.json", HttpService:JSONEncode({
+        ["Reason"] = reason,
+        ["Detail"] = detail,
+        ["OldJobId"] = oldJobId,
+        ["IsEmergency"] = isEmergency
+    }))
+    
+    task.wait(0.5)
+    -- Thực hiện nhảy server
     pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Anzzckc/get-hopsv/refs/heads/main/runhopsv.lua"))()
     end)
 end
 
--- 4. GIÁM SÁT ADMIN VÀ CHAT
+-- 4. KIỂM TRA BÁO CÁO TỒN ĐỌNG KHI VỪA VÀO SERVER
+task.spawn(function()
+    if isfile("XuanAn_PendingReport.json") then
+        local success, reportData = pcall(function() 
+            return HttpService:JSONDecode(readfile("XuanAn_PendingReport.json")) 
+        end)
+        if success and reportData then
+            -- Gửi báo cáo từ server mới về server cũ vừa rời đi
+            SendVipReport(reportData.Reason, reportData.Detail, reportData.OldJobId, reportData.IsEmergency)
+            delfile("XuanAn_PendingReport.json") -- Xóa file sau khi báo cáo xong
+        end
+    end
+end)
+
+-- 5. HỆ THỐNG GIÁM SÁT (Admin & Chat)
+local AdminList = {"rip_indra", "mygame43", "Uzoth", "Zioles", "ShafiDev", "Suizei"}
+local DangerWords = {"kick", "ban", "kill", "tp", "bring", "freeze", "jail", "profile"}
+local Prefixes = {":", ";", "/", ".", "?", "!", "-"}
+
 local function Monitor(player)
     if player == Players.LocalPlayer then return end
+
+    -- Phát Hiện Player Nhạy Cảm
     for _, adminName in pairs(AdminList) do
         if player.Name == adminName then
-            ExecuteHop("Phát hiện Admin " .. player.Name .. " vừa vào server.", "Tên đối tượng: " .. player.Name, true)
+            ExecuteHop("Phát Hiện Player Nhạy Cảm", "Đối tượng: " .. player.Name, true)
             return
         end
     end
+
+    -- Có Lệnh Nhạy Cảm
     player.Chatted:Connect(function(msg)
         local m = string.lower(msg)
         for _, pfx in pairs(Prefixes) do
             for _, word in pairs(DangerWords) do
                 if string.find(m, pfx .. word) then
-                    ExecuteHop("Phát hiện lệnh điều khiển nguy hiểm.", "Đối tượng " .. player.Name .. " chat: " .. msg, true)
+                    ExecuteHop("Có Lệnh Nhạy Cảm", "Đối tượng " .. player.Name .. " chat: " .. msg, true)
                     return
                 end
             end
@@ -108,11 +138,11 @@ end
 for _, p in pairs(Players:GetPlayers()) do Monitor(p) end
 Players.PlayerAdded:Connect(Monitor)
 
--- 5. VÒNG LẶP TUẦN TRA 1 GIỜ
+-- Tự động Hop sau 1 giờ
 task.spawn(function()
-    while task.wait(1.5) do
+    while task.wait(3600) do
         if Config and Config["sau 1h có hop server không?"] then
-            ExecuteHop("Bảo trì định kỳ", "Tự động đổi server sau 1 giờ hoạt động.", false)
+            ExecuteHop("Đã Hop Server Sau 1h hoạt động", "Hệ thống tự động làm mới server.", false)
             break
         end
     end
