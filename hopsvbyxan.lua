@@ -1,4 +1,4 @@
--- [[ MAIN LOGIC V6.0 - OBFUSCATE THIS ]]
+-- [[ MAIN LOGIC V6.1 - OBFUSCATE THIS ]]
 local Config = _G.XuanAn
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -26,32 +26,71 @@ local function ManageHopCount(isRealHop)
     return count
 end
 
--- Hàm gửi Webhook mẫu Spidey Bot
+-- Hàm gửi Webhook Discord (Đã tối ưu Embed + Click-to-Copy)
 local function SendVipReport(action, reason, detail, jobId, isEmergency)
     if not Config or not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
+    
     local totalHops = ManageHopCount(false)
     local timestamp = os.date("%H:%M:%S - %m/%d/%Y")
-    local color = isEmergency and 16711680 or 65280
+    local color = isEmergency and 16711680 or 65280  -- Đỏ cho emergency, Xanh cho bình thường
     local playerCount = #Players:GetPlayers()
-    local teleportScript = 'game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", "'..jobId..'")'
     
+    local teleportScript = 'game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", "'..jobId..'")'
+
     local data = {
         ["embeds"] = {{
-            ["title"] = "Notification 🔔",
-            ["description"] = "Action: **" .. action .. "**",
+            ["title"] = "🔔 Notification - Server Hop",
+            ["description"] = "**Action:** " .. action,
             ["color"] = color,
+            ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ"),  -- ISO timestamp cho Discord
+            ["footer"] = {
+                ["text"] = "XuanAn Hop System • V6.1"
+            },
             ["fields"] = {
-                {["name"] = "📈 Hop Count", ["value"] = tostring(totalHops), ["inline"] = false},
-                {["name"] = "⏰ Timestamp", ["value"] = timestamp, ["inline"] = false},
-                {["name"] = "⚠️ Reason", ["value"] = reason, ["inline"] = false},
-                {["name"] = "🔍 Detail", ["value"] = detail, ["inline"] = false},
-                {["name"] = "📊 Players :", ["value"] = "`" .. playerCount .. "/12`", ["inline"] = false},
-                {["name"] = "🆔 Place-Id :", ["value"] = "`" .. game.PlaceId .. "`", ["inline"] = false},
-                {["name"] = "🆔 Job-Id (Current) :", ["value"] = "`" .. jobId .. "`", ["inline"] = false},
-                {["name"] = "📜 Script :", ["value"] = "```lua\n" .. teleportScript .. "\n```", ["inline"] = false}
+                {
+                    ["name"] = "📈 Hop Count",
+                    ["value"] = "`" .. tostring(totalHops) .. "`",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "⏰ Timestamp",
+                    ["value"] = "`" .. timestamp .. "`",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "⚠️ Reason",
+                    ["value"] = "`" .. reason .. "`",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "🔍 Detail",
+                    ["value"] = "`" .. detail .. "`",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "📊 Players",
+                    ["value"] = "`" .. playerCount .. "/12`",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "🆔 Place ID",
+                    ["value"] = "`" .. game.PlaceId .. "`",
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "🆔 Job ID (Current)",
+                    ["value"] = "`" .. jobId .. "`",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "📜 Teleport Script",
+                    ["value"] = "```lua\n" .. teleportScript .. "\n```",
+                    ["inline"] = false
+                }
             }
         }}
     }
+
     pcall(function()
         request({
             Url = Config.Webhook.Url,
@@ -79,12 +118,16 @@ local Prefixes = {":", ";", "/", ".", "?", "!", "-"}
 
 local function Monitor(player)
     if player == LocalPlayer then return end
+    
+    -- Kiểm tra Admin
     for _, adminName in pairs(AdminList) do
         if player.Name == adminName then
             ExecuteHop("Admin Detected", "Target: " .. player.Name, true)
             return
         end
     end
+    
+    -- Kiểm tra Chat nguy hiểm
     player.Chatted:Connect(function(msg)
         local m = string.lower(msg)
         for _, pfx in pairs(Prefixes) do
@@ -97,6 +140,7 @@ local function Monitor(player)
         end
     end)
 end
+
 for _, p in pairs(Players:GetPlayers()) do Monitor(p) end
 Players.PlayerAdded:Connect(Monitor)
 
@@ -105,7 +149,7 @@ task.spawn(function()
     while true do
         task.wait(300)
         if Config["Enable 5-Min Ping"] then
-            SendVipReport("Monitoring Server Status...", "Periodic Status Ping", "Account is still active and farming.", game.JobId, false)
+            SendVipReport("Monitoring Server Status...", "Periodic Status Ping", "Account is still active.", game.JobId, false)
         end
     end
 end)
