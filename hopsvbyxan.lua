@@ -7,7 +7,7 @@ local GuiService = game:GetService("GuiService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
--- 1. Logic quản lý tệp tin Hop Count (Lưu trữ số lần nhảy server)
+-- Logic quản lý tệp tin Hop Count
 local function ManageHopCount(isRealHop)
     local fileName = LocalPlayer.Name .. ".json"
     local lastUpdate, count = 0, 0
@@ -18,7 +18,6 @@ local function ManageHopCount(isRealHop)
             count = data.Count or 0 
         end
     end
-    -- Reset đếm sau 3 tiếng (10800 giây)
     if (os.time() - lastUpdate) > 10800 then count = 0 end
     if isRealHop then
         count = count + 1
@@ -27,37 +26,32 @@ local function ManageHopCount(isRealHop)
     return count
 end
 
--- 2. Hàm gửi Webhook với cấu trúc Click-to-copy (Sử dụng backtick `)
+-- Hàm gửi Webhook mẫu Spidey Bot (đã tối ưu click-to-copy trên mobile)
 local function SendVipReport(action, reason, detail, jobId, isEmergency)
     if not Config or not Config.Webhook.Enable or Config.Webhook.Url == "" then return end
-    
     local totalHops = ManageHopCount(false)
-    local timestamp = os.date("%H:%M:%S - %d/%m/%Y")
-    local color = isEmergency and 16711680 or 65280 -- Đỏ nếu khẩn cấp, Xanh lá nếu bình thường
+    local timestamp = os.date("%H:%M:%S - %m/%d/%Y")
+    local color = isEmergency and 16711680 or 65280
     local playerCount = #Players:GetPlayers()
-    
-    -- Lệnh script để người dùng copy và dán vào executor
     local teleportScript = 'game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", "'..jobId..'")'
-    
+
     local data = {
         ["embeds"] = {{
-            ["title"] = "🔔 Notification System",
+            ["title"] = "Notification 🔔",
             ["description"] = "Action: **" .. action .. "**",
             ["color"] = color,
             ["fields"] = {
-                {["name"] = "📈 Hop Count", ["value"] = "`" .. tostring(totalHops) .. "`", ["inline"] = true},
-                {["name"] = "⏰ Timestamp", ["value"] = "`" .. timestamp .. "`", ["inline"] = true},
-                {["name"] = "⚠️ Reason", ["value"] = "`" .. reason .. "`", ["inline"] = false},
-                {["name"] = "🔍 Detail", ["value"] = "```" .. detail .. "```", ["inline"] = false},
-                {["name"] = "📊 Players", ["value"] = "`" .. playerCount .. "/12`", ["inline"] = true},
-                {["name"] = "🆔 Place-Id", ["value"] = "`" .. game.PlaceId .. "`", ["inline"] = true},
-                {["name"] = "🆔 Job-Id (Current)", ["value"] = "`" .. jobId .. "`", ["inline"] = false},
-                {["name"] = "📜 Teleport Script (Click to Copy)", ["value"] = "```lua\n" .. teleportScript .. "\n```", ["inline"] = false}
-            },
-            ["footer"] = {["text"] = "Spidey Bot Monitoring"}
+                {["name"] = "📈 Hop Count",    ["value"] = "`" .. tostring(totalHops) .. "`",    ["inline"] = false},
+                {["name"] = "⏰ Timestamp",    ["value"] = "`" .. timestamp .. "`",             ["inline"] = false},
+                {["name"] = "⚠️ Reason",       ["value"] = "`" .. reason .. "`",                ["inline"] = false},
+                {["name"] = "🔍 Detail",       ["value"] = "`" .. detail .. "`",                ["inline"] = false},
+                {["name"] = "📊 Players :",    ["value"] = "`" .. playerCount .. "/12`",        ["inline"] = false},
+                {["name"] = "🆔 Place-Id :",   ["value"] = "`" .. game.PlaceId .. "`",          ["inline"] = false},
+                {["name"] = "🆔 Job-Id (Current) :", ["value"] = "`" .. jobId .. "`",           ["inline"] = false},
+                {["name"] = "📜 Script :",     ["value"] = "`" .. teleportScript .. "`",        ["inline"] = false}
+            }
         }}
     }
-
     pcall(function()
         request({
             Url = Config.Webhook.Url,
@@ -68,7 +62,7 @@ local function SendVipReport(action, reason, detail, jobId, isEmergency)
     end)
 end
 
--- 3. Hàm thực hiện nhảy Server
+-- Hàm thực hiện nhảy Server
 local function ExecuteHop(reason, detail, isEmergency)
     ManageHopCount(true)
     SendVipReport("Hopping to New Server...", reason, detail, game.JobId, isEmergency)
@@ -78,21 +72,19 @@ local function ExecuteHop(reason, detail, isEmergency)
     end)
 end
 
--- 4. Hệ thống Né Admin & Chat nhạy cảm
+-- Hệ thống Né Admin & Chat nhạy cảm
 local AdminList = {"rip_indra", "mygame43", "Uzoth", "Zioles", "ShafiDev", "Suizei"}
 local DangerWords = {"kick", "ban", "kill", "tp", "bring", "freeze", "jail", "profile"}
 local Prefixes = {":", ";", "/", ".", "?", "!", "-"}
 
 local function Monitor(player)
     if player == LocalPlayer then return end
-    -- Kiểm tra Admin vào server
     for _, adminName in pairs(AdminList) do
         if player.Name == adminName then
             ExecuteHop("Admin Detected", "Target: " .. player.Name, true)
             return
         end
     end
-    -- Kiểm tra tin nhắn nhạy cảm
     player.Chatted:Connect(function(msg)
         local m = string.lower(msg)
         for _, pfx in pairs(Prefixes) do
@@ -105,21 +97,20 @@ local function Monitor(player)
         end
     end)
 end
-
 for _, p in pairs(Players:GetPlayers()) do Monitor(p) end
 Players.PlayerAdded:Connect(Monitor)
 
--- 5. Heartbeat Ping (Mỗi 5 phút)
+-- HÀM PING 5 PHÚT (HEARTBEAT)
 task.spawn(function()
     while true do
         task.wait(300)
         if Config["Enable 5-Min Ping"] then
-            SendVipReport("Monitoring Status", "Periodic Status Ping", "Account is still active.", game.JobId, false)
+            SendVipReport("Monitoring Server Status...", "Periodic Status Ping", "Account is still active.", game.JobId, false)
         end
     end
 end)
 
--- 6. Auto Reconnect (Tự động kết nối lại khi mất mạng)
+-- AUTO RECONNECT (Dành cho rớt mạng)
 GuiService.ErrorMessageChanged:Connect(function()
     local errorCode = GuiService:GetErrorCode()
     local NetworkErrors = {[277] = true, [279] = true, [280] = true}
@@ -128,7 +119,7 @@ GuiService.ErrorMessageChanged:Connect(function()
     end
 end)
 
--- 7. Auto Hop theo giờ cấu chỉnh
+-- AUTO HOP THEO GIỜ
 task.spawn(function()
     if Config["Automatically Hop When The Time Comes"] then
         task.wait(Config.HopIntervalHours * 3600)
